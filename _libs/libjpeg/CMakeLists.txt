@@ -1,0 +1,69 @@
+cmake_minimum_required(VERSION 2.6)
+project(libjpeg)
+
+set(SRC_LIBJPEG
+	${SRC_LIBJPEG}
+	
+	jversion.h
+	jutils.c
+	jquant2.c
+	jquant1.c
+	jpeglib.h
+	jpegint.h
+	jmorecfg.h
+	jmemsys.h
+	jmemnobs.c
+	jmemmgr.c
+	jinclude.h
+	jidctred.c
+	jidctint.c
+	jidctfst.c
+	jidctflt.c
+	jfdctint.c
+	jfdctfst.c
+	jfdctflt.c
+	jerror.h
+	jerror.c
+	jdtrans.c
+	jdsample.c
+	jdpostct.c
+	jdphuff.c
+	jdmerge.c
+	jdmaster.c
+	jdmarker.c
+	jdmainct.c
+	jdinput.c
+	jdhuff.h
+	jdhuff.c
+	jddctmgr.c
+	jdct.h
+	jdcolor.c
+	jdcoefct.c
+	jdatasrc.c
+	jdatadst.c
+	jdapistd.c
+	jdapimin.c
+	jctrans.c
+	jcsample.c
+	jcprepct.c
+	jcphuff.c
+	jcparam.c
+	jconfig.h
+	jcomapi.c
+	jcmaster.c
+	jcmarker.c
+	jcmainct.c
+	jcinit.c
+	jchuff.h
+	jchuff.c
+	jcdctmgr.c
+	jccolor.c
+	jccoefct.c
+	jcapistd.c
+	jcapimin.c
+	cderror.h
+)
+
+include_directories(${CMAKE_CURRENT_LIST_DIR})
+add_library( libjpeg STATIC ${SRC_LIBJPEG} )
+set_target_properties(libjpeg PROPERTIES FOLDER "_library")

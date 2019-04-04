@@ -1,5 +1,3 @@
-*.o
-*.d
-*.swp
-*.conf
-data/*
+./shadertoy-bin/*
+./shadertoy-lib/*
+./shadertoy-build/*

@@ -25,7 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <GL/glew.h>
 
 #ifndef __APPLE__
-#include <GL/glut.h>
+#include <GL/freeglut.h>
 #else
 #include <GLUT/glut.h>
 #endif
@@ -38,13 +38,19 @@ struct Texture {
 	const char *stype;
 };
 
+int frameCounter = 0;
+int prev_time = 0;
+int curr_time = 0;
+int delta_time = 0;
+std::string sampleNameStr;
+
 void disp();
-void idle();
 void idle();
 void reshape(int x, int y);
 void keyb(unsigned char key, int x, int y);
 void mouse(int bn, int state, int x, int y);
 void motion(int x, int y);
+void fps(int value);
 unsigned int load_shader(const char *fname);
 bool load_shader_metadata(const char *sdrname);
 Texture *load_texture(const char *fname);
@@ -56,49 +62,98 @@ static struct {
 	int resolution;
 	int globaltime;
 	int channeltime[4];
+	int channelres[4];
 	int mouse;
 	int sampler[4];
 	int date;
 } uloc;
 std::vector<Texture*> textures;
 Texture notex = { 0, GL_TEXTURE_2D, "2D" };
-Texture *activetex[4] = {&notex, &notex, &notex, &notex};
+Texture *activetex[4] = { &notex, &notex, &notex, &notex };
+
+int texW[4] = { -1, -1, -1, -1 };
+int texH[4] = { -1, -1, -1, -1 };
+
+bool isFullScreen = false;
+
 int win_width, win_height;
 int mouse_x, mouse_y, click_x, click_y;
 
 std::vector<int> tex_arg;
 const char *sdrfname_arg;
 
-#define LOADTEX(fname)	\
-	do { \
-		Texture *tex = load_texture(fname); \
-		if(!tex) { \
-			return 1; \
-		} \
-		textures.push_back(tex); \
-		printf("  Texture2D %2d: %s\n", dataidx++, fname); \
-	} while(0)
+int LOADTEX(const std::string& fname, int& dataidx)
+{
+	Texture *tex = load_texture(fname.c_str());
+	if(!tex) {
+		return 1;
+	}
+	textures.push_back(tex);
+	printf("  Texture2D %2d: %s\n", dataidx++, fname.c_str());
+}
 
-#define LOADCUBE(fname) \
-	do { \
-		Texture *tex = load_cubemap(fname); \
-		if(!tex) { \
-			return 1; \
-		} \
-		textures.push_back(tex); \
-		printf("TextureCube %2d: %s\n", dataidx++, fname); \
-	} while(0)
+//#define LOADCUBE(fname) \
+//	do { \
+//		Texture *tex = load_cubemap(fname.c_str()); \
+//		if(!tex) { \
+//			return 1; \
+//		} \
+//		textures.push_back(tex); \
+//		printf("TextureCube %2d: %s\n", dataidx++, fname.c_str()); \
+//	} while(0)
+
+#include <string>
+#include <fstream>
+#include <sstream>
+
+std::string rootData = "";
+
+/** file path helper */
+static bool findFullPath(const std::string& root, std::string& filePath)
+{
+	bool fileFound = false;
+	const std::string resourcePath = root;
+
+	filePath = resourcePath + filePath;
+	for (unsigned int i = 0; i < 16; ++i)
+	{
+		std::ifstream file;
+		file.open(filePath.c_str());
+		if (file.is_open())
+		{
+			fileFound = true;
+			break;
+		}
+
+		filePath = "../" + filePath;
+	}
+
+	return fileFound;
+}
+
+// ../data/Lanterns.glsl -t 8 -t 11
+// ../data/Woods.glsl -t 13 -t 6 -t 9 -t 7
+// ../data/Clouds.glsl -t 13
+// ../data/MountainPeak.glsl
 
 int main(int argc, char **argv)
 {
+	{
+		std::string locStr = "filesystem.loc";
+		size_t len = locStr.size();
+
+		bool fileFound = findFullPath("data/", locStr);
+		rootData = locStr.substr(0, locStr.size() - len);
+	}
+
 	glutInitWindowSize(1280, 720);
 	glutInit(&argc, argv);
 
-	if(!parse_args(argc, argv)) {
+	if (!parse_args(argc, argv)) {
 		return 1;
 	}
 
-	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
+	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_MULTISAMPLE);
 	glutCreateWindow("ShaderToy viewer");
 
 	glutDisplayFunc(disp);
@@ -107,42 +162,59 @@ int main(int argc, char **argv)
 	glutKeyboardFunc(keyb);
 	glutMouseFunc(mouse);
 	glutMotionFunc(motion);
+	glutTimerFunc(0, &fps, 0);
 
-	glewInit();
+	//glDisable(GL_MULTISAMPLE);
+
+	glEnable(GL_MULTISAMPLE);
+	glutSetOption(GLUT_MULTISAMPLE, 16);
+	glHint(GL_MULTISAMPLE_FILTER_HINT_NV, GL_NICEST);
+
+	// GLEW_OK
+	GLenum isGLEWOK = glewInit();
+	if (GLEW_OK != isGLEWOK)
+	{
+		/* Problem: glewInit failed, something is seriously wrong. */
+		fprintf(stderr, "Error: %s\n", glewGetErrorString(isGLEWOK));
+		return 1;
+	}
 
 	int dataidx = 0;
 
-	LOADTEX("data/tex00.jpg");
-	LOADTEX("data/tex01.jpg");
-	LOADTEX("data/tex02.jpg");
-	LOADTEX("data/tex03.jpg");
-	LOADTEX("data/tex04.jpg");
-	LOADTEX("data/tex05.jpg");
-	LOADTEX("data/tex06.jpg");
-	LOADTEX("data/tex07.jpg");
-	LOADTEX("data/tex08.jpg");
-	LOADTEX("data/tex09.jpg");
-	LOADTEX("data/tex10.png");
-	LOADTEX("data/tex11.png");
-	LOADTEX("data/tex12.png");
-	LOADTEX("data/tex14.png");
+	LOADTEX(rootData + "textures/tex00.jpg", dataidx);
+	LOADTEX(rootData + "textures/tex01.jpg", dataidx);
+	LOADTEX(rootData + "textures/tex02.jpg", dataidx);
+	LOADTEX(rootData + "textures/tex03.jpg", dataidx);
+	LOADTEX(rootData + "textures/tex04.jpg", dataidx);
+	LOADTEX(rootData + "textures/tex05.jpg", dataidx);
+	LOADTEX(rootData + "textures/tex06.jpg", dataidx);
+	LOADTEX(rootData + "textures/tex07.jpg", dataidx);
+	LOADTEX(rootData + "textures/tex08.jpg", dataidx);
+	LOADTEX(rootData + "textures/tex09.jpg", dataidx);
+	LOADTEX(rootData + "textures/tex10.png", dataidx);
+	LOADTEX(rootData + "textures/tex11.png", dataidx);
+	LOADTEX(rootData + "textures/tex12.png", dataidx);
+	LOADTEX(rootData + "textures/tex16.png", dataidx);
 	assert(glGetError() == GL_NO_ERROR);
 
-	LOADCUBE("data/cube00_%d.jpg");
-	LOADCUBE("data/cube01_%d.png");
-	LOADCUBE("data/cube02_%d.jpg");
-	LOADCUBE("data/cube03_%d.png");
-	LOADCUBE("data/cube04_%d.png");
-	LOADCUBE("data/cube05_%d.png");
+	//LOADCUBE("data/cube00_%d.jpg");
+	//LOADCUBE("data/cube01_%d.png");
+	//LOADCUBE("data/cube02_%d.jpg");
+	//LOADCUBE("data/cube03_%d.png");
+	//LOADCUBE("data/cube04_%d.png");
+	//LOADCUBE("data/cube05_%d.png");
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 
-	load_shader_metadata(sdrfname_arg);
+	//load_shader_metadata(sdrfname_arg);
 
 	// override with -t arguments
 	for(size_t i=0; i<tex_arg.size(); i++) {
 		activetex[i] = textures[tex_arg[i]];
+
+		texW[i] = 64;
+		texH[i] = 64;
 	}
 
 	if(!(sdr = load_shader(sdrfname_arg))) {
@@ -150,12 +222,36 @@ int main(int argc, char **argv)
 	}
 
 	assert(glGetError() == GL_NO_ERROR);
+
+	if (isFullScreen)
+	{
+		glutFullScreen();
+		assert(glGetError() == GL_NO_ERROR);
+	}
+
+	{
+		GLint iMultiSample = 0;
+		GLint iNumSamples = 0;
+		glGetIntegerv(GL_SAMPLE_BUFFERS, &iMultiSample);
+		glGetIntegerv(GL_SAMPLES, &iNumSamples);
+		assert(glGetError() == GL_NO_ERROR);
+
+		printf("GL_SAMPLE_BUFFERS = %d, GL_SAMPLES = %d\n", iMultiSample, iNumSamples);
+	}
+
+	{
+		printf("WINDOW_WIDTH x WINDOW_HEIGHT: %d x %d", glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT));
+	}
+
 	glutMainLoop();
+
 	return 0;
 }
 
 void disp()
 {
+	++frameCounter;
+
 	time_t tmsec = time(0);
 	struct tm *tm = localtime(&tmsec);
 
@@ -167,11 +263,16 @@ void disp()
 
 	// set uniforms
 	glUniform2f(uloc.resolution, win_width, win_height);
-	glUniform1f(uloc.globaltime, glutGet(GLUT_ELAPSED_TIME) / 1000.0);
-	glUniform4f(uloc.mouse, mouse_x, mouse_y, click_x, click_y);
-	glUniform4f(uloc.date, tm->tm_year, tm->tm_mon, tm->tm_mday,
-			tm->tm_sec + tm->tm_min * 60 + tm->tm_hour * 3600);
+	GLenum err = glGetError();
+
 	assert(glGetError() == GL_NO_ERROR);
+	glUniform1f(uloc.globaltime, glutGet(GLUT_ELAPSED_TIME) / 1000.0);
+	assert(glGetError() == GL_NO_ERROR);
+	glUniform4f(uloc.mouse, mouse_x, mouse_y, click_x, click_y);
+	assert(glGetError() == GL_NO_ERROR);
+	//glUniform4f(uloc.date, tm->tm_year, tm->tm_mon, tm->tm_mday,
+	//		tm->tm_sec + tm->tm_min * 60 + tm->tm_hour * 3600);
+	//assert(glGetError() == GL_NO_ERROR);
 
 	int tunit = 0;
 	for(int i=0; i<4; i++) {
@@ -197,6 +298,10 @@ void disp()
 
 void idle()
 {
+	prev_time = curr_time;
+	curr_time = glutGet(GLUT_ELAPSED_TIME);
+	delta_time = curr_time - prev_time;
+
 	glutPostRedisplay();
 }
 
@@ -215,19 +320,49 @@ void keyb(unsigned char key, int x, int y)
 
 	case 'f':
 	case 'F':
-		{
-			static int orig_width = -1, orig_height;
+	{
+		static int orig_width = -1, orig_height;
 
-			if(orig_width != -1) {
-				glutReshapeWindow(orig_width, orig_height);
-				orig_width = -1;
-			} else {
-				orig_width = win_width;
-				orig_height = win_height;
-				glutFullScreen();
+		if(orig_width != -1) {
+			glutReshapeWindow(orig_width, orig_height);
+			orig_width = -1;
+		} else {
+			orig_width = win_width;
+			orig_height = win_height;
+			glutFullScreen();
+		}
+	}
+	break;
+
+	case '*':
+	{
+		unsigned char* buffer = new unsigned char[win_width * win_height * 4];
+
+		glReadBuffer(GL_BACK);
+
+		glReadPixels(0, 0, win_width, win_height, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)buffer);
+
+		std::fstream fh((sampleNameStr + ".ppm").c_str(), std::fstream::out | std::fstream::binary);
+
+		fh << "P6\n";
+		fh << win_width << "\n" << win_height << "\n" << 0xff << std::endl;
+
+		for (int j = 0; j < win_height; ++j)
+		{
+			for (int i = 0; i < win_width; ++i)
+			{
+				// flip ogl backbuffer vertically
+				fh << buffer[4 * ((win_height - 1 - j)*win_width + i) + 0];
+				fh << buffer[4 * ((win_height - 1 - j)*win_width + i) + 1];
+				fh << buffer[4 * ((win_height - 1 - j)*win_width + i) + 2];
 			}
 		}
-		break;
+		fh.flush();
+		fh.close();
+
+		delete[] buffer;
+	}
+	break;
 	}
 }
 
@@ -243,16 +378,29 @@ void motion(int x, int y)
 	mouse_y = y;
 }
 
-static const char *header =
-	"uniform vec2 iResolution;\n"
-	"uniform float iGlobalTime;\n"
-	"uniform float iChannelTime[4];\n"
-	"uniform vec4 iMouse;\n"
-	"uniform sampler%s iChannel0;\n"
-	"uniform sampler%s iChannel1;\n"
-	"uniform sampler%s iChannel2;\n"
-	"uniform sampler%s iChannel3;\n"
-	"uniform vec4 iDate;\n";
+void fps(int value)
+{
+	std::stringstream titleSS;
+	titleSS << "ShaderToy viewer - " << sampleNameStr << " - " << delta_time << " ms / " << 4 * frameCounter << " FPS @ " << win_width << " x " << win_height;
+
+	frameCounter = 0;
+
+	glutSetWindowTitle(titleSS.str().c_str());
+	glutTimerFunc(250, &fps, 1);
+}
+
+//static const char *header =
+//	"uniform vec2 iResolution;\n"
+//	"uniform float iGlobalTime;\n"
+//	"uniform float iChannelTime[4];\n"
+//	"uniform vec4 iMouse;\n"
+//	"uniform sampler%s iChannel0;\n"
+//	"uniform sampler%s iChannel1;\n"
+//	"uniform sampler%s iChannel2;\n"
+//	"uniform sampler%s iChannel3;\n"
+//	"uniform vec4 iDate;\n";
+
+static const char *header = "\n";
 
 unsigned int load_shader(const char *fname)
 {
@@ -336,8 +484,13 @@ unsigned int load_shader(const char *fname)
 	uloc.date = glGetUniformLocation(prog, "iDate");
 	for(int i=0; i<4; i++) {
 		char buf[64];
+
 		sprintf(buf, "iChannelTime[%d]", i);
 		uloc.channeltime[i] = glGetUniformLocation(prog, buf);
+
+		sprintf(buf, "iChannelResolution[%d]", i);
+		uloc.channelres[i] = glGetUniformLocation(prog, buf);
+
 		sprintf(buf, "iChannel%d", i);
 		uloc.sampler[i] = glGetUniformLocation(prog, buf);
 	}
@@ -463,6 +616,9 @@ bool parse_args(int argc, char **argv)
 					tex_arg.push_back(idx);
 				}
 				break;
+			case 'b':
+				isFullScreen = true;
+				break;
 
 			default:
 				fprintf(stderr, "unrecognized option: %s\n", argv[i]);
@@ -474,6 +630,18 @@ bool parse_args(int argc, char **argv)
 				return false;
 			}
 			sdrfname_arg = argv[++i];
+			{
+				// tidy shader path for title bar
+				sampleNameStr = sdrfname_arg;
+				{
+					std::size_t found = sampleNameStr.find_last_of("/\\");
+					sampleNameStr = sampleNameStr.substr(found + 1);
+				}
+				{
+					std::size_t found = sampleNameStr.find_last_of(".");
+					sampleNameStr = sampleNameStr.substr(0, found);
+				}
+			}
 		}
 	}
 	return true;
